@@ -59,20 +59,12 @@ public class ShelfEditor : Editor
 
         if (GUILayout.Button("Clear Children"))
         {
-            ClearChildren(shelf);
+            shelf.ClearChildren();
         }
 
         if (GUI.changed)
         {
             EditorUtility.SetDirty(shelf);
-        }
-    }
-
-    private void ClearChildren(Shelf shelf)
-    {
-        for (int i = shelf.transform.childCount - 1; i >= 0; i--)
-        {
-            DestroyImmediate(shelf.transform.GetChild(i).gameObject);
         }
     }
 }

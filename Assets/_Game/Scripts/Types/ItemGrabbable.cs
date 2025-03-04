@@ -11,6 +11,8 @@ public class ItemGrabbable : Item
     [SerializeField] private Outline myOutline;
     private Color originalOutlineColor;
     
+    private Transform originalParent;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -18,6 +20,7 @@ public class ItemGrabbable : Item
         lastDamageTime = -cooldownTime;
         myOutline = GetComponent<Outline>();
         originalOutlineColor = myOutline.OutlineColor;
+        originalParent = transform.parent; // Save the original parent
     }
 
     private void Update()
@@ -67,11 +70,26 @@ public class ItemGrabbable : Item
         if (isInCart)
         {
             //Truck.Instance.AddItem(this);
+            rb.isKinematic = true; // Disable physics while in the cart
+        }
+        else
+        {
+            rb.isKinematic = false; // Enable physics when removed from the cart
         }
     }
 
     public void SetOutline(bool isHighlighted)
     {
         myOutline.OutlineColor = isHighlighted ? Color.green : originalOutlineColor;
+    }
+
+    public void DetachFromParent()
+    {
+        transform.parent = null;
+    }
+
+    public void ReattachToParent()
+    {
+        transform.parent = originalParent;
     }
 }

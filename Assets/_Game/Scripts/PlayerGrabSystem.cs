@@ -14,6 +14,7 @@ public class PlayerGrabSystem : MonoBehaviour
     private Rigidbody grabbedRb;
     private Vector3 initialPickupPosition; // Store original pickup position
     [SerializeField] private float holdDistance = 5f; // Fixed holding distance
+    [SerializeField] private bool usePhysics = true; // Toggle physics-based holding
 
     public float minHoldDistance = 2f; // Minimum distance to hold the item from the camera
     public float maxHoldDistance = 7f;
@@ -22,9 +23,6 @@ public class PlayerGrabSystem : MonoBehaviour
     public float lowerSpeed = 0.1f;
     public float horizontalMoveSpeed = 5f; // Speed at which the object follows camera left/right
     public float holdHeightAdjustment = 0.5f; // Adjust height based on weight
-
-    private bool isLifting = false;
-    private bool isLowering = false;
 
     [Header("Physics Settings")]
     public float objectWeightFactor = 0.1f; // Affects how much weight influences holding height
@@ -37,6 +35,7 @@ public class PlayerGrabSystem : MonoBehaviour
 
     private LineRenderer lineRenderer;
     private ItemGrabbable lastHighlightedItem;
+    private Interactable lastInteractable;
 
     void Awake()
     {
@@ -52,15 +51,15 @@ public class PlayerGrabSystem : MonoBehaviour
         HandleHolding();
         UpdateDotColor();
         /* UpdateLineRenderer(); */
-        HighlightAndGrabItem();
+        HighlightAndGrabOrInteractItem();
     }
 
-    // Called by UI Button (Grab/Drop)
-    public void ToggleGrabDrop()
+    // Called by UI Button (Grab/Drop/Interact)
+    public void OnGrabDropInteract()
     {
         if (grabbedItem == null)
         {
-            TryPickup();
+            TryPickupOrInteract();
         }
         else
         {
@@ -68,27 +67,48 @@ public class PlayerGrabSystem : MonoBehaviour
         }
     }
 
-    private void TryPickup()
+    private void TryPickupOrInteract()
     {
         RaycastHit hit;
         if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out hit, pickupRange, pickupLayer))
         {
-            // Store the original pickup position
-            initialPickupPosition = hit.point;
-
-            grabbedItem = hit.collider.gameObject;
-            grabbedRb = grabbedItem.GetComponent<Rigidbody>();
-
-            if (grabbedRb != null)
+            // Try to interact first
+            Interactable interactable = hit.collider.GetComponent<Interactable>();
+            if (interactable != null)
             {
-                grabbedRb.velocity = Vector3.zero; // Stop movement
-                grabbedRb.angularVelocity = Vector3.zero; // Stop spinning
-                grabbedRb.useGravity = false; // Disable gravity while holding
+                interactable.Interact();
+                return;
+            }
 
-                // Freeze rotation constraints
-                grabbedRb.constraints = RigidbodyConstraints.FreezeRotation;
+            // If not interactable, try to grab
+            ItemGrabbable itemGrabbable = hit.collider.GetComponent<ItemGrabbable>();
+            if (itemGrabbable != null)
+            {
+                // Store the original pickup position
+                initialPickupPosition = hit.point;
 
-                FindObjectOfType<UIManager>().SetUIState(true);
+                grabbedItem = itemGrabbable.gameObject;
+                grabbedRb = grabbedItem.GetComponent<Rigidbody>();
+
+                if (grabbedRb != null)
+                {
+                    grabbedRb.velocity = Vector3.zero; // Stop movement
+                    grabbedRb.angularVelocity = Vector3.zero; // Stop spinning
+
+                    if (usePhysics)
+                    {
+                        grabbedRb.useGravity = false; // Disable gravity while holding
+
+                        // Freeze rotation constraints
+                        grabbedRb.constraints = RigidbodyConstraints.FreezeRotation;
+                    }
+                    else
+                    {
+                        grabbedRb.isKinematic = true; // Make kinematic to avoid physical interactions
+                    }
+
+                    FindObjectOfType<UIManager>().SetUIState(true);
+                }
             }
         }
     }
@@ -98,29 +118,29 @@ public class PlayerGrabSystem : MonoBehaviour
         if (grabbedItem)
         {
             Vector3 holdPosition = cameraTransform.position + cameraTransform.forward * holdDistance;
-            holdPosition.y += holdHeightAdjustment - grabbedRb.mass * objectWeightFactor;
 
-            // Ensure the item is not too close to the camera
-            float distanceToCamera = Vector3.Distance(cameraTransform.position, holdPosition);
-            if (distanceToCamera < minHoldDistance)
+            if (usePhysics)
             {
-                holdPosition = cameraTransform.position + cameraTransform.forward * minHoldDistance;
-            }
+                holdPosition.y += holdHeightAdjustment - grabbedRb.mass * objectWeightFactor;
 
-            if (isLifting)
+                // Ensure the item is not too close to the camera
+                float distanceToCamera = Vector3.Distance(cameraTransform.position, holdPosition);
+                if (distanceToCamera < minHoldDistance)
+                {
+                    holdPosition = cameraTransform.position + cameraTransform.forward * minHoldDistance;
+                }
+
+                // Smoothly move the object to the target position
+                grabbedRb.MovePosition(Vector3.Lerp(grabbedItem.transform.position, holdPosition, Time.deltaTime * grabSmoothing));
+
+                // Prevent clipping through objects
+                PreventClipping(holdPosition);
+            }
+            else
             {
-                holdPosition.y += liftSpeed;
+                // Directly move the item to hold position without physics
+                grabbedItem.transform.position = holdPosition;
             }
-            else if (isLowering)
-            {
-                holdPosition.y -= lowerSpeed;
-            }
-
-            // Smoothly move the object to the target position
-            grabbedRb.MovePosition(Vector3.Lerp(grabbedItem.transform.position, holdPosition, Time.deltaTime * grabSmoothing));
-
-            // Prevent clipping through objects
-            PreventClipping(holdPosition);
         }
     }
 
@@ -144,8 +164,15 @@ public class PlayerGrabSystem : MonoBehaviour
     {
         if (grabbedRb != null)
         {
-            grabbedRb.useGravity = true; // Re-enable gravity
-            grabbedRb.constraints = RigidbodyConstraints.None; // Release rotation constraints
+            if (usePhysics)
+            {
+                grabbedRb.useGravity = true; // Re-enable gravity
+                grabbedRb.constraints = RigidbodyConstraints.None; // Release rotation constraints
+            }
+            else
+            {
+                grabbedRb.isKinematic = false; // Disable kinematic mode
+            }
         }
         grabbedItem = null;
         grabbedRb = null;
@@ -156,7 +183,14 @@ public class PlayerGrabSystem : MonoBehaviour
     {
         if (grabbedItem)
         {
+            // Check if the item is too close to any surface
+            if (IsSurfaceTooClose())
+            {
+                return; // Do not throw the item if a surface is too close
+            }
+
             grabbedRb.useGravity = true;
+            grabbedRb.isKinematic = false;
             grabbedRb.constraints = RigidbodyConstraints.None; // Release rotation constraints
             grabbedRb.AddForce(cameraTransform.forward * throwForce, ForceMode.Impulse);
             grabbedItem = null;
@@ -165,43 +199,55 @@ public class PlayerGrabSystem : MonoBehaviour
         }
     }
 
+    private bool IsSurfaceTooClose()
+    {
+        RaycastHit hit;
+        return Physics.Raycast(cameraTransform.position, cameraTransform.forward, out hit, minHoldDistance, ~pickupLayer);
+    }
+
     private void UpdateDotColor()
     {
         RaycastHit hit;
         if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out hit, pickupRange, pickupLayer))
         {
-            dotImage.color = highlightDotColor;
+            // Check for interactable
+            Interactable interactable = hit.collider.GetComponent<Interactable>();
+            if (interactable != null)
+            {
+                dotImage.color = highlightDotColor;
+                return;
+            }
+
+            // Check for grabbable
+            ItemGrabbable itemGrabbable = hit.collider.GetComponent<ItemGrabbable>();
+            if (itemGrabbable != null)
+            {
+                dotImage.color = highlightDotColor;
+                return;
+            }
         }
-        else
-        {
-            dotImage.color = defaultDotColor;
-        }
+
+        dotImage.color = defaultDotColor;
     }
 
-    private void UpdateLineRenderer()
-    {
-        if (cameraTransform != null)
-        {
-            lineRenderer.enabled = true;
-            lineRenderer.SetPosition(0, cameraTransform.position);
-            lineRenderer.SetPosition(1, cameraTransform.position + cameraTransform.forward * pickupRange);
-        }
-    }
-
-    private void OnDrawGizmos()
-    {
-        if (cameraTransform != null)
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawLine(cameraTransform.position, cameraTransform.position + cameraTransform.forward * pickupRange);
-        }
-    }
-
-    private void HighlightAndGrabItem()
+    private void HighlightAndGrabOrInteractItem()
     {
         RaycastHit hit;
         if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out hit, pickupRange, pickupLayer))
         {
+            Interactable interactable = hit.collider.GetComponent<Interactable>();
+            if (interactable != null)
+            {
+                if (lastInteractable != null && lastInteractable != interactable)
+                {
+                    lastInteractable.SetOutline(false);
+                }
+                interactable.SetOutline(true);
+                lastInteractable = interactable;
+
+                return;
+            }
+
             ItemGrabbable itemGrabbable = hit.collider.GetComponent<ItemGrabbable>();
             if (itemGrabbable != null)
             {
@@ -211,47 +257,21 @@ public class PlayerGrabSystem : MonoBehaviour
                 }
                 itemGrabbable.SetOutline(true);
                 lastHighlightedItem = itemGrabbable;
-
-                // Check for touch input to grab the item
-                if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
-                {
-                    // Check if the touch is near the dot (center of the screen)
-                    Touch touch = Input.GetTouch(0);
-                    Vector2 touchPosition = touch.position;
-
-                    // Convert screen coordinates to viewport coordinates
-                    Vector2 viewportTouchPosition = new Vector2(touchPosition.x / Screen.width, touchPosition.y / Screen.height);
-
-                    // Check if the touch is near the center of the screen (dot position)
-                    if (Vector2.Distance(viewportTouchPosition, new Vector2(0.5f, 0.5f)) < 0.05f) // Adjust the threshold as needed
-                    {
-                        TryPickup();
-                    }
-                }
             }
         }
-        else if (lastHighlightedItem != null)
+        else
         {
-            lastHighlightedItem.SetOutline(false);
-            lastHighlightedItem = null;
+            if (lastInteractable != null)
+            {
+                lastInteractable.SetOutline(false);
+                lastInteractable = null;
+            }
+
+            if (lastHighlightedItem != null)
+            {
+                lastHighlightedItem.SetOutline(false);
+                lastHighlightedItem = null;
+            }
         }
-    }
-
-    public void LiftItem()
-    {
-        isLifting = true;
-        isLowering = false;
-    }
-
-    public void LowerItem()
-    {
-        isLowering = true;
-        isLifting = false;
-    }
-
-    public void StopLiftingLowering()
-    {
-        isLifting = false;
-        isLowering = false;
     }
 }

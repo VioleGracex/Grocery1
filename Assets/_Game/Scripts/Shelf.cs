@@ -23,59 +23,61 @@ public class Shelf : MonoBehaviour
 
     private void Start()
     {
-        AdjustDepthAndWidth();
-        //PlaceItemsOnShelf();
+        //AdjustDepthAndWidth();
     }
 
     public void PlaceItemsOnShelf()
     {
-        AdjustDepthAndWidth();
-        UpdatePlacedItems();
-
-        // Starting positions for item placement
-        float startX = positionOffset.x - width / 2 + cellSize.x / 2;
-        float startY = positionOffset.y;
-        float startZ = positionOffset.z - depth / 2 + cellSize.y / 2;
-
-        float currentX = startX;
-        float currentY = startY;
-        float currentZ = startZ;
-
-        for (int i = 0; i < itemCount; i++)
+        try
         {
-            GameObject itemPrefab = productPool.itemPrefabs[Random.Range(0, productPool.itemPrefabs.Count)];
-            GameObject item = Instantiate(itemPrefab, transform);
+            AdjustDepthAndWidth();
+            UpdatePlacedItems();
 
-            // Save the original scale and set it after instantiating
-            Vector3 originalScale = item.transform.localScale;
-            item.transform.localScale = new Vector3(originalScale.x / transform.localScale.x, originalScale.y / transform.localScale.y, originalScale.z / transform.localScale.z);
+            float startX = positionOffset.x - width / 2 + cellSize.x / 2;
+            float startY = positionOffset.y;
+            float startZ = positionOffset.z - depth / 2 + cellSize.y / 2;
 
-            Vector3 itemSize = GetItemSize(item);
+            float currentX = startX;
+            float currentY = startY;
+            float currentZ = startZ;
 
-            // Check if the item can fit in the current cell
-            bool canFit = CheckIfItemCanFit(itemSize, currentX, currentZ, currentY);
-            if (!canFit)
+            for (int i = 0; i < itemCount; i++)
             {
-                Debug.LogWarning("Not enough space on the shelf for more items.");
-                DestroyImmediate(item);
-                break;
-            }
+                GameObject itemPrefab = productPool.itemPrefabs[Random.Range(0, productPool.itemPrefabs.Count)];
+                GameObject item = Instantiate(itemPrefab, transform);
 
-            item.transform.localPosition = new Vector3(currentX, currentY + yOffset, currentZ);
-            placedItems.Add(item);
+                Vector3 originalScale = item.transform.localScale;
+                item.transform.localScale = new Vector3(originalScale.x / transform.localScale.x, originalScale.y / transform.localScale.y, originalScale.z / transform.localScale.z);
 
-            // Move to the next cell in the grid
-            currentX += cellSize.x + gap;
-            if (currentX + cellSize.x / 2 > startX + width)
-            {
-                currentX = startX;
-                currentZ += cellSize.y + gap;
-                if (currentZ + cellSize.y / 2 > startZ + depth)
+                Vector3 itemSize = GetItemSize(item);
+
+                bool canFit = CheckIfItemCanFit(itemSize, currentX, currentZ, currentY);
+                if (!canFit)
                 {
-                    currentZ = startZ;
-                    currentY += itemSize.y + gap;
+                    Debug.LogWarning("Not enough space on the shelf for more items.");
+                    DestroyImmediate(item);
+                    break;
+                }
+
+                item.transform.localPosition = new Vector3(currentX, currentY + yOffset, currentZ);
+                placedItems.Add(item);
+
+                currentX += cellSize.x + Mathf.Max(gap, 0);
+                if (currentX + cellSize.x / 2 > startX + width)
+                {
+                    currentX = startX;
+                    currentZ += cellSize.y + Mathf.Max(gap, 0);
+                    if (currentZ + cellSize.y / 2 > startZ + depth)
+                    {
+                        currentZ = startZ;
+                        currentY += itemSize.y + Mathf.Max(gap, 0);
+                    }
                 }
             }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Error placing items on shelf: " + ex.Message);
         }
     }
 
@@ -134,9 +136,9 @@ public class Shelf : MonoBehaviour
         if (!colorsInitialized)
         {
             gridColors.Clear();
-            for (float x = 0; x < width; x += cellSize.x + gap)
+            for (float x = 0; x < width; x += cellSize.x + Mathf.Max(gap, 0))
             {
-                for (float z = 0; z < depth; z += cellSize.y + gap)
+                for (float z = 0; z < depth; z += cellSize.y + Mathf.Max(gap, 0))
                 {
                     gridColors.Add(new Color(Random.value, Random.value, Random.value));
                 }
@@ -157,30 +159,42 @@ public class Shelf : MonoBehaviour
         if (showGrid)
         {
             Vector3 gridPosition = transform.position + positionOffset - new Vector3(width / 2, 0, depth / 2);
-            // Draw grid lines and top-down view
             Gizmos.color = Color.blue;
-            for (float i = 0; i <= width; i += cellSize.x + gap)
+            for (float i = 0; i <= width; i += cellSize.x + Mathf.Max(gap, 0))
             {
                 Gizmos.DrawLine(gridPosition + new Vector3(i, 0, 0), gridPosition + new Vector3(i, 0, depth));
             }
-            for (float i = 0; i <= depth; i += cellSize.y + gap)
+            for (float i = 0; i <= depth; i += cellSize.y + Mathf.Max(gap, 0))
             {
                 Gizmos.DrawLine(gridPosition + new Vector3(0, 0, i), gridPosition + new Vector3(width, 0, i));
             }
 
-            // Initialize grid colors if not already done
             InitializeGridColors();
 
-            // Draw top-down view squares
             int colorIndex = 0;
-            for (float x = 0; x < width; x += cellSize.x + gap)
+            for (float x = 0; x < width; x += cellSize.x + Mathf.Max(gap, 0))
             {
-                for (float z = 0; z < depth; z += cellSize.y + gap)
+                for (float z = 0; z < depth; z += cellSize.y + Mathf.Max(gap, 0))
                 {
                     Gizmos.color = gridColors[colorIndex++];
                     Gizmos.DrawCube(gridPosition + new Vector3(x + cellSize.x / 2, yOffset + 0.1f, z + cellSize.y / 2), new Vector3(cellSize.x, 0.1f, cellSize.y));
                 }
             }
+        }
+    }
+
+    public void ClearChildren()
+    {
+        try
+        {
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                DestroyImmediate(transform.GetChild(i).gameObject);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Error clearing children: " + ex.Message);
         }
     }
 }
