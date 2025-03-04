@@ -33,15 +33,15 @@ public class UIManager : MonoBehaviour
         {
             grabDropButtonText.text = "Drop";
             throwButton.SetActive(true);
-            liftButton.gameObject.SetActive(true);
-            lowerButton.gameObject.SetActive(true);
+           /*  liftButton.gameObject.SetActive(true);
+            lowerButton.gameObject.SetActive(true); */
         }
         else
         {
             grabDropButtonText.text = "Grab";
             throwButton.SetActive(false);
-            liftButton.gameObject.SetActive(false);
-            lowerButton.gameObject.SetActive(false);
+            /* liftButton.gameObject.SetActive(false);
+            lowerButton.gameObject.SetActive(false); */
         }
     }
 }

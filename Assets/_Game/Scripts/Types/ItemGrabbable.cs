@@ -10,7 +10,7 @@ public class ItemGrabbable : Item
     [SerializeField] private bool isInCart = false;
     [SerializeField] private Outline myOutline;
     private Color originalOutlineColor;
-
+    
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -64,6 +64,10 @@ public class ItemGrabbable : Item
     public void SetInCart(bool inCart)
     {
         isInCart = inCart;
+        if (isInCart)
+        {
+            //Truck.Instance.AddItem(this);
+        }
     }
 
     public void SetOutline(bool isHighlighted)

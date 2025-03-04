@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-[RequireComponent(typeof(LineRenderer))]
 public class PlayerGrabSystem : MonoBehaviour
 {
     [Header("Pickup Settings")]
@@ -41,18 +40,18 @@ public class PlayerGrabSystem : MonoBehaviour
 
     void Awake()
     {
-        lineRenderer = GetComponent<LineRenderer>();
+        /* lineRenderer = GetComponent<LineRenderer>();
         lineRenderer.startWidth = 0.05f;
         lineRenderer.endWidth = 0.05f;
         lineRenderer.positionCount = 2;
-        lineRenderer.enabled = false;
+        lineRenderer.enabled = false; */
     }
 
     void Update()
     {
         HandleHolding();
         UpdateDotColor();
-        UpdateLineRenderer();
+        /* UpdateLineRenderer(); */
         HighlightAndGrabItem();
     }
 
