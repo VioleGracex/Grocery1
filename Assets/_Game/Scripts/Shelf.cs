@@ -7,11 +7,15 @@ public class Shelf : MonoBehaviour
     public float width = 10f;
     public float height = 5f;
     public float depth = 2f;
-    public float gap = 0.5f; // Gap between items
+    public float gap = 0.5f; // Gap between cells
     public int itemCount; // Number of items to place on the shelf
     public Vector3 positionOffset; // Position offset for item placement
     public float yOffset = 0.1f; // Small offset to prevent clipping
     public bool autoDepthAndWidth = false; // Auto adjust depth and width based on mesh plane
+    public Vector2 cellSize = new Vector2(1f, 1f); // Cell size for the grid (width, depth)
+
+    public bool showGizmos = true; // Toggle for showing Gizmos
+    public bool showGrid = true; // Toggle for showing grid
 
     private List<GameObject> placedItems = new List<GameObject>();
     private List<Color> gridColors = new List<Color>();
@@ -29,11 +33,13 @@ public class Shelf : MonoBehaviour
         UpdatePlacedItems();
 
         // Starting positions for item placement
-        float currentWidth = positionOffset.x - width / 2;
-        float currentHeight = positionOffset.y;
-        float currentDepth = positionOffset.z - depth / 2;
-        float maxHeightInRow = 0f;
-        float maxDepthInRow = 0f;
+        float startX = positionOffset.x - width / 2 + cellSize.x / 2;
+        float startY = positionOffset.y;
+        float startZ = positionOffset.z - depth / 2 + cellSize.y / 2;
+
+        float currentX = startX;
+        float currentY = startY;
+        float currentZ = startZ;
 
         for (int i = 0; i < itemCount; i++)
         {
@@ -46,15 +52,8 @@ public class Shelf : MonoBehaviour
 
             Vector3 itemSize = GetItemSize(item);
 
-            // Check if the item can be rotated to fit the shelf
-            bool canFit = CheckIfItemCanFit(itemSize, ref currentWidth, ref currentDepth, ref currentHeight, ref maxHeightInRow, ref maxDepthInRow);
-            if (!canFit)
-            {
-                item.transform.Rotate(0, 90, 0);
-                itemSize = GetItemSize(item);
-                canFit = CheckIfItemCanFit(itemSize, ref currentWidth, ref currentDepth, ref currentHeight, ref maxHeightInRow, ref maxDepthInRow);
-            }
-
+            // Check if the item can fit in the current cell
+            bool canFit = CheckIfItemCanFit(itemSize, currentX, currentZ, currentY);
             if (!canFit)
             {
                 Debug.LogWarning("Not enough space on the shelf for more items.");
@@ -62,26 +61,19 @@ public class Shelf : MonoBehaviour
                 break;
             }
 
-            item.transform.localPosition = new Vector3(currentWidth, currentHeight + yOffset, currentDepth);
+            item.transform.localPosition = new Vector3(currentX, currentY + yOffset, currentZ);
             placedItems.Add(item);
-            currentWidth += itemSize.x + gap;
 
-            maxHeightInRow = Mathf.Max(maxHeightInRow, itemSize.y);
-            maxDepthInRow = Mathf.Max(maxDepthInRow, itemSize.z);
-
-            // Check if need to move to the next row
-            if (currentWidth + itemSize.x > width / 2)
+            // Move to the next cell in the grid
+            currentX += cellSize.x + gap;
+            if (currentX + cellSize.x / 2 > startX + width)
             {
-                currentWidth = positionOffset.x - width / 2;
-                currentDepth += maxDepthInRow + gap;
-                maxDepthInRow = 0f;
-
-                // Check if need to move to the next column
-                if (currentDepth + itemSize.z > depth / 2)
+                currentX = startX;
+                currentZ += cellSize.y + gap;
+                if (currentZ + cellSize.y / 2 > startZ + depth)
                 {
-                    currentDepth = positionOffset.z - depth / 2;
-                    currentHeight += maxHeightInRow + gap;
-                    maxHeightInRow = 0f;
+                    currentZ = startZ;
+                    currentY += itemSize.y + gap;
                 }
             }
         }
@@ -114,27 +106,12 @@ public class Shelf : MonoBehaviour
         }
     }
 
-    private bool CheckIfItemCanFit(Vector3 itemSize, ref float currentWidth, ref float currentDepth, ref float currentHeight, ref float maxHeightInRow, ref float maxDepthInRow)
+    private bool CheckIfItemCanFit(Vector3 itemSize, float currentX, float currentZ, float currentY)
     {
-        if (currentWidth + itemSize.x > width / 2)
-        {
-            currentWidth = positionOffset.x - width / 2;
-            currentDepth += maxDepthInRow + gap;
-            maxDepthInRow = 0f;
-        }
-
-        if (currentDepth + itemSize.z > depth / 2)
-        {
-            currentDepth = positionOffset.z - depth / 2;
-            currentHeight += maxHeightInRow + gap;
-            maxHeightInRow = 0f;
-        }
-
-        if (currentHeight + itemSize.y > height)
+        if (currentX + itemSize.x / 2 > width / 2 || currentZ + itemSize.z / 2 > depth / 2 || currentY + itemSize.y > height)
         {
             return false;
         }
-
         return true;
     }
 
@@ -157,9 +134,9 @@ public class Shelf : MonoBehaviour
         if (!colorsInitialized)
         {
             gridColors.Clear();
-            for (float x = 0; x < width; x += gap)
+            for (float x = 0; x < width; x += cellSize.x + gap)
             {
-                for (float z = 0; z < depth; z += gap)
+                for (float z = 0; z < depth; z += cellSize.y + gap)
                 {
                     gridColors.Add(new Color(Random.value, Random.value, Random.value));
                 }
@@ -170,33 +147,39 @@ public class Shelf : MonoBehaviour
 
     private void OnDrawGizmos()
     {
+        if (!showGizmos) return;
+
         AdjustDepthAndWidth();
         Gizmos.color = Color.green;
         Vector3 adjustedPosition = transform.position + positionOffset - new Vector3(width / 2, 0, depth / 2);
         Gizmos.DrawWireCube(adjustedPosition + new Vector3(width / 2, height / 2, depth / 2), new Vector3(width, height, depth));
 
-        // Draw grid lines and top-down view
-        Gizmos.color = Color.blue;
-        for (float i = 0; i <= width; i += gap)
+        if (showGrid)
         {
-            Gizmos.DrawLine(adjustedPosition + new Vector3(i, 0, 0), adjustedPosition + new Vector3(i, 0, depth));
-        }
-        for (float i = 0; i <= depth; i += gap)
-        {
-            Gizmos.DrawLine(adjustedPosition + new Vector3(0, 0, i), adjustedPosition + new Vector3(width, 0, i));
-        }
-
-        // Initialize grid colors if not already done
-        InitializeGridColors();
-
-        // Draw top-down view squares
-        int colorIndex = 0;
-        for (float x = 0; x < width; x += gap)
-        {
-            for (float z = 0; z < depth; z += gap)
+            Vector3 gridPosition = transform.position + positionOffset - new Vector3(width / 2, 0, depth / 2);
+            // Draw grid lines and top-down view
+            Gizmos.color = Color.blue;
+            for (float i = 0; i <= width; i += cellSize.x + gap)
             {
-                Gizmos.color = gridColors[colorIndex++];
-                Gizmos.DrawCube(adjustedPosition + new Vector3(x + gap / 2, height + 0.1f, z + gap / 2), new Vector3(gap, 0.1f, gap));
+                Gizmos.DrawLine(gridPosition + new Vector3(i, 0, 0), gridPosition + new Vector3(i, 0, depth));
+            }
+            for (float i = 0; i <= depth; i += cellSize.y + gap)
+            {
+                Gizmos.DrawLine(gridPosition + new Vector3(0, 0, i), gridPosition + new Vector3(width, 0, i));
+            }
+
+            // Initialize grid colors if not already done
+            InitializeGridColors();
+
+            // Draw top-down view squares
+            int colorIndex = 0;
+            for (float x = 0; x < width; x += cellSize.x + gap)
+            {
+                for (float z = 0; z < depth; z += cellSize.y + gap)
+                {
+                    Gizmos.color = gridColors[colorIndex++];
+                    Gizmos.DrawCube(gridPosition + new Vector3(x + cellSize.x / 2, yOffset + 0.1f, z + cellSize.y / 2), new Vector3(cellSize.x, 0.1f, cellSize.y));
+                }
             }
         }
     }
