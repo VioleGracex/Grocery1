@@ -53,7 +53,7 @@ public class PlayerGrabSystem : MonoBehaviour
         HandleHolding();
         UpdateDotColor();
         UpdateLineRenderer();
-        HighlightItem();
+        HighlightAndGrabItem();
     }
 
     // Called by UI Button (Grab/Drop)
@@ -198,7 +198,7 @@ public class PlayerGrabSystem : MonoBehaviour
         }
     }
 
-    private void HighlightItem()
+    private void HighlightAndGrabItem()
     {
         RaycastHit hit;
         if (Physics.Raycast(cameraTransform.position, cameraTransform.forward, out hit, pickupRange, pickupLayer))
@@ -212,6 +212,23 @@ public class PlayerGrabSystem : MonoBehaviour
                 }
                 itemGrabbable.SetOutline(true);
                 lastHighlightedItem = itemGrabbable;
+
+                // Check for touch input to grab the item
+                if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
+                {
+                    // Check if the touch is near the dot (center of the screen)
+                    Touch touch = Input.GetTouch(0);
+                    Vector2 touchPosition = touch.position;
+
+                    // Convert screen coordinates to viewport coordinates
+                    Vector2 viewportTouchPosition = new Vector2(touchPosition.x / Screen.width, touchPosition.y / Screen.height);
+
+                    // Check if the touch is near the center of the screen (dot position)
+                    if (Vector2.Distance(viewportTouchPosition, new Vector2(0.5f, 0.5f)) < 0.05f) // Adjust the threshold as needed
+                    {
+                        TryPickup();
+                    }
+                }
             }
         }
         else if (lastHighlightedItem != null)
